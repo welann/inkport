@@ -140,9 +140,10 @@ pnpm update:device
 3. 修改 Manifest、加入 `BootReceiver`、替换 `assets/index.html`；
 4. 回包、`zipalign`、用 `apk/debug.keystore` 签名；
 5. 覆盖安装 `com.onyx.easytransfer.mod`；
-6. 停用原 `com.onyx.easytransfer`，加入 Doze 白名单；
-7. 启动克隆的前台服务；
-8. 轮询设备 Wi-Fi IP 的 8085，直到返回 `墨港`。
+6. **重新授予存储权限**（`READ/WRITE_EXTERNAL_STORAGE`、`MANAGE_EXTERNAL_STORAGE` appops）；重装会清掉运行时权限，不补就会出现“页面能开、列表和上传全空”；
+7. 停用原 `com.onyx.easytransfer`，并确认它不在 enabled 列表；失败则拒绝启动，避免两个服务抢 8085；
+8. 加入 Doze 白名单，启动克隆的前台服务；
+9. 轮询设备 Wi-Fi IP 的 8085，直到页面返回 `墨港` **且** `/api/storage` 能列出根目录。
 
 成功时会输出：
 
@@ -163,6 +164,9 @@ pnpm patch:device
 
 ```bash
 adb install -r apk/clone-boot-signed.apk
+adb shell pm grant com.onyx.easytransfer.mod android.permission.READ_EXTERNAL_STORAGE
+adb shell pm grant com.onyx.easytransfer.mod android.permission.WRITE_EXTERNAL_STORAGE
+adb shell appops set com.onyx.easytransfer.mod MANAGE_EXTERNAL_STORAGE allow
 adb shell am force-stop com.onyx.easytransfer
 adb shell pm disable-user --user 0 com.onyx.easytransfer
 adb shell am start-foreground-service -n com.onyx.easytransfer.mod/com.onyx.easytransfer.service.TransferService
@@ -176,6 +180,9 @@ curl -s http://boox.local:8085/ | grep -o '<title>[^<]*'
 
 # 设备 API 应正常
 curl -s http://boox.local:8085/api/device
+# 根目录必须能列出内容（count > 0）；count 0 说明存储权限丢了
+curl -s -G --data-urlencode 'args={"dir":"/storage/emulated/0","limit":1,"refresh":true}' \
+  http://boox.local:8085/api/storage
 
 # 原应用在 disabled 列表，克隆在 enabled 列表
 adb shell pm list packages -d | grep easytransfer
@@ -193,7 +200,20 @@ adb shell dumpsys activity services com.onyx.easytransfer.mod | grep isForegroun
 adb shell 'ip -4 addr show wlan0' | awk '/inet /{print $2}'
 ```
 
-### 3.4 更新页面
+### 3.4 常见接口问题
+
+- **页面能打开，但「最近」和「文件」全是空的**：重装克隆后运行时存储权限被重置。执行：
+  ```bash
+  adb shell pm grant com.onyx.easytransfer.mod android.permission.READ_EXTERNAL_STORAGE
+  adb shell pm grant com.onyx.easytransfer.mod android.permission.WRITE_EXTERNAL_STORAGE
+  adb shell appops set com.onyx.easytransfer.mod MANAGE_EXTERNAL_STORAGE allow
+  adb shell am force-stop com.onyx.easytransfer.mod
+  adb shell am start-foreground-service -n com.onyx.easytransfer.mod/com.onyx.easytransfer.service.TransferService
+  ```
+  然后刷新页面。`pnpm update:device` 已自动处理这一步。
+- **8085 又变回原版 / 两个应用同时运行**：原应用被重新启用。先 `am force-stop`，再 `pm disable-user --user 0 com.onyx.easytransfer`，确认 `pm list packages -e` 里没有它，然后重启克隆服务。
+
+### 3.5 更新页面
 
 以后改了代码：
 
@@ -203,7 +223,7 @@ pnpm update:device
 
 会重新构建、重打包、覆盖安装（同一调试签名，应用数据保留），再启动服务。因为页面在 APK 的 `assets/index.html` 里，**不能只替换一个文件**；必须重打包。
 
-### 3.5 恢复原版
+### 3.6 恢复原版
 
 ```bash
 pnpm restore:device
@@ -220,7 +240,7 @@ adb shell am start -n com.onyx.easytransfer/com.onyx.easytransfer.main.MainActiv
 
 恢复后 8085 会重新返回原版 BOOX Drop。原系统 APK 一直在 `/system/app/EasyTransfer/`，不会被删除。
 
-### 3.6 开机与保活
+### 3.7 开机与保活
 
 - 克隆 Manifest 里加了 `RECEIVE_BOOT_COMPLETED` 和 `BOOT_COMPLETED` 接收器；
 - 接收器启动 `TransferService`，`onStartCommand` 调用 `DataBundle.startServer()`；

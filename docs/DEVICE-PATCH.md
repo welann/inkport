@@ -46,7 +46,9 @@ pnpm update:device
 1. `pnpm build:embedded` 生成同源单文件 `dist-embedded/InkPort-embedded.html`；
 2. 用 `apk/EasyTransfer.apk` 重新解码、打补丁、回包；
 3. 覆盖安装 `com.onyx.easytransfer.mod`（同一调试签名，数据保留）；
-4. 启动克隆前台服务并等待 8085 返回 `墨港`。
+4. 重新授予存储权限（重装会重置运行时权限）；
+5. 停用原应用并确认它不在 enabled 列表；
+6. 启动克隆前台服务，等待 8085 返回 `墨港` 且 `/api/storage` 能列出根目录。
 
 只构建、不安装：
 
@@ -61,6 +63,9 @@ pnpm patch:device
 
 ```bash
 adb install -r apk/clone-boot-signed.apk
+adb shell pm grant com.onyx.easytransfer.mod android.permission.READ_EXTERNAL_STORAGE
+adb shell pm grant com.onyx.easytransfer.mod android.permission.WRITE_EXTERNAL_STORAGE
+adb shell appops set com.onyx.easytransfer.mod MANAGE_EXTERNAL_STORAGE allow
 adb shell am force-stop com.onyx.easytransfer
 adb shell pm disable-user --user 0 com.onyx.easytransfer
 adb shell am start-foreground-service -n com.onyx.easytransfer.mod/com.onyx.easytransfer.service.TransferService
@@ -98,9 +103,22 @@ adb shell am start -n com.onyx.easytransfer/com.onyx.easytransfer.main.MainActiv
 3. 在 `smali_classes5` 增加 `BootReceiver.smali`：`startForegroundService(TransferService)`
 4. 用 `dist-embedded/InkPort-embedded.html` 替换 `assets/index.html`
 5. `apktool b` → `zipalign -p 4` → `apksigner`（调试证书）
-6. 可选 `--install` / `--replace`，安装后停用原应用、启动克隆、检查 8085
+6. 可选 `--install` / `--replace`，安装后授予存储权限、停用原应用、启动克隆，并检查页面与 `/api/storage`
 
 同源模式（`embedded`）的页面不填设备地址：所有 `/api/...` 都相对于当前 8085 源，因此没有 CORS、没有代理、没有固定 IP。
+
+## 常见问题
+
+- **页面是墨港，但最近/文件列表为空、上传失败**：克隆重装后运行时存储权限被清空。执行：
+  ```bash
+  adb shell pm grant com.onyx.easytransfer.mod android.permission.READ_EXTERNAL_STORAGE
+  adb shell pm grant com.onyx.easytransfer.mod android.permission.WRITE_EXTERNAL_STORAGE
+  adb shell appops set com.onyx.easytransfer.mod MANAGE_EXTERNAL_STORAGE allow
+  adb shell am force-stop com.onyx.easytransfer.mod
+  adb shell am start-foreground-service -n com.onyx.easytransfer.mod/com.onyx.easytransfer.service.TransferService
+  ```
+  然后刷新页面。`pnpm update:device` 已自动执行这些授权。
+- **8085 又返回原版，或原版和克隆同时运行**：执行 `am force-stop` 后重新 `pm disable-user --user 0 com.onyx.easytransfer`，确认 `pm list packages -e | grep easytransfer` 只有 `.mod`，再启动克隆服务。
 
 ## 注意事项
 

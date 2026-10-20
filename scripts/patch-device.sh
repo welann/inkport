@@ -154,9 +154,28 @@ echo "Built $SIGNED"
 
 if [[ "$INSTALL" -eq 1 ]]; then
   adb install -r "$SIGNED" >/dev/null
+
+  # Reinstalling resets runtime permissions. Storage APIs need these before the
+  # server starts, otherwise /api/storage and /api/media/list return count 0.
+  adb shell pm grant com.onyx.easytransfer.mod android.permission.READ_EXTERNAL_STORAGE >/dev/null 2>&1 || true
+  adb shell pm grant com.onyx.easytransfer.mod android.permission.WRITE_EXTERNAL_STORAGE >/dev/null 2>&1 || true
+  adb shell pm grant com.onyx.easytransfer.mod android.permission.READ_MEDIA_IMAGES >/dev/null 2>&1 || true
+  adb shell pm grant com.onyx.easytransfer.mod android.permission.READ_MEDIA_VIDEO >/dev/null 2>&1 || true
+  adb shell pm grant com.onyx.easytransfer.mod android.permission.READ_MEDIA_AUDIO >/dev/null 2>&1 || true
+  adb shell appops set com.onyx.easytransfer.mod MANAGE_EXTERNAL_STORAGE allow >/dev/null 2>&1 || true
+
   if [[ "$REPLACE" -eq 1 ]]; then
     adb shell am force-stop com.onyx.easytransfer >/dev/null 2>&1 || true
+    sleep 1
     adb shell pm disable-user --user 0 com.onyx.easytransfer >/dev/null 2>&1 || true
+    if adb shell pm list packages -e | grep -qx 'package:com.onyx.easytransfer'; then
+      adb shell pm disable com.onyx.easytransfer >/dev/null 2>&1 || true
+    fi
+    if adb shell pm list packages -e | grep -qx 'package:com.onyx.easytransfer'; then
+      echo "Original BooxDrop is still enabled; refusing to start a conflicting 8085 server." >&2
+      exit 1
+    fi
+    adb shell am force-stop com.onyx.easytransfer >/dev/null 2>&1 || true
     adb shell dumpsys deviceidle whitelist +com.onyx.easytransfer.mod >/dev/null 2>&1 || true
     adb shell am start-foreground-service -n com.onyx.easytransfer.mod/com.onyx.easytransfer.service.TransferService >/dev/null
     DEVICE_IP=$(adb shell 'ip -4 addr show wlan0' | awk '/inet /{print $2}' | cut -d/ -f1 | head -1 | tr -d '\r')
@@ -164,17 +183,23 @@ if [[ "$INSTALL" -eq 1 ]]; then
     for _ in $(seq 1 120); do
       page=$(adb shell "curl -s --max-time 3 http://$DEVICE_IP:8085/" 2>/dev/null || true)
       if [[ "$page" == *"InkPort"* ]]; then
-        echo "InkPort is now serving at http://$DEVICE_IP:8085/."
-        exit 0
+        storage=$(adb shell "curl -s --max-time 3 'http://$DEVICE_IP:8085/api/storage?args=%7B%22dir%22%3A%22%2Fstorage%2Femulated%2F0%22%2C%22limit%22%3A1%2C%22refresh%22%3Atrue%7D'" 2>/dev/null || true)
+        if [[ "$storage" == *'"successful":true'* && "$storage" != *'"count":0'* ]]; then
+          echo "InkPort is now serving at http://$DEVICE_IP:8085/."
+          exit 0
+        fi
       fi
       sleep 1
     done
-    echo "Installed, but port 8085 did not answer yet. Check the device / logcat." >&2
+    echo "Page loaded but storage API is empty/not ready. Check permissions:" >&2
+    echo "  adb shell appops get com.onyx.easytransfer.mod MANAGE_EXTERNAL_STORAGE" >&2
+    echo "  adb shell pm list packages -d | grep easytransfer" >&2
     exit 1
   else
     echo "Installed. To make the clone the 8085 server, run:"
     echo "  adb shell am force-stop com.onyx.easytransfer"
     echo "  adb shell pm disable-user --user 0 com.onyx.easytransfer"
+    echo "  adb shell appops set com.onyx.easytransfer.mod MANAGE_EXTERNAL_STORAGE allow"
     echo "  adb shell am start-foreground-service -n com.onyx.easytransfer.mod/com.onyx.easytransfer.service.TransferService"
   fi
 fi
