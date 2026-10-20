@@ -1,0 +1,30 @@
+{
+  "name": "inkport",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "dev:server": "node server/index.ts",
+    "build": "vite build",
+    "start": "node server/index.ts",
+    "preview": "pnpm build && node server/index.ts",
+    "build:standalone": "vite build --mode standalone && node scripts/inline.ts dist-standalone InkPort.html",
+    "build:embedded": "vite build --mode embedded && node scripts/inline.ts dist-embedded InkPort-embedded.html",
+    "patch:device": "bash scripts/patch-device.sh",
+    "update:device": "bash scripts/update-device.sh",
+    "restore:device": "bash scripts/restore-booxdrop.sh"
+  },
+  "dependencies": {
+    "sharp": "^0.34.3"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "typescript": "^5.9.2",
+    "vite": "^7.1.2"
+  },
+  "engines": {
+    "node": ">=23"
+  },
+  "description": "墨港（InkPort）— an e-ink file dock for BOOX devices"
+}
