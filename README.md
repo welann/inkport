@@ -1,10 +1,16 @@
 # 墨港 · InkPort
 
-> 英文仓库名：`inkport` · 中文名：墨港
+给文石 Leaf5C（以及可能的同类 BOOX 设备）的 BooxDrop 换一个有用的前端（别担心，可以恢复为原版的）。
 
-给文石 Leaf5C（以及同类 BOOX 设备）的 BooxDrop 换一个有用的前端。
+> 如果你要使用本项目的话，建议开启usb调试之后丢给AI就好
 
-原版 BooxDrop 把文件当成“待下载附件”：图片不能放大、PDF 不能翻、书库没封面、搜索和文件夹操作也别扭。墨港直接调用设备 8085 端口上的 BooxDrop API，提供图片灯箱、PDF/视频/文本页内预览、书库封面、网格/列表、搜索、上传、新建文件夹、重命名和删除。
+<p align="center">
+  <img src="docs/images/inkport-recent.webp" alt="墨港最近文件界面：书籍封面、格式标签、搜索与文件网格" width="100%" />
+</p>
+
+<p align="center"><sub>最近文件 · EPUB/PDF 封面 · 图片缩略图 · 书库</sub></p>
+
+墨港直接调用设备 8085 端口上的 BooxDrop API，提供图片灯箱、PDF/视频/文本页内预览、书库封面、网格/列表、搜索、上传、新建文件夹、重命名和删除。
 
 有两种部署方式：
 
